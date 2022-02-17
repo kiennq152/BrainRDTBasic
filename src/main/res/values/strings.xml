@@ -1,0 +1,23 @@
+<resources>
+    <string name="app_name">Brain RDT Basic</string>
+    <string name="action_settings">Settings</string>
+    <string name="action_userinformation">User Information</string>
+    <string name="true_icon">0x2714</string>
+    <string name="false_icon">0x2716</string>
+    <!-- Strings used for fragments for navigation -->
+    <string name="first_fragment_label">Login</string>
+    <string name="second_fragment_label">Brain RDT</string>
+    <string name="next">Next</string>
+    <string name="previous">Previous</string>
+    <string name="Main">Main View</string>
+    <string name="Test">VAT Record</string>
+    <string name="Timetable">Timetable</string>
+    <string name="Setting">System Setting</string>
+    <string name="hello_first_fragment">Hello first fragment</string>
+    <string name="hello_second_fragment">Hello second fragment. Arg: %1$s</string>
+    <!-- TODO: Remove or change this placeholder text -->
+    <string name="Visual_Acuity_fragment">Visual Acuity Test</string>
+    <string name="VATinstruction"> Please say out the direction of the C character in the Test. The C is randomly displayed in each eye.
+        Please stop doing the test if you feel uncomfortable and give us your feedback.</string>
+
+</resources>
