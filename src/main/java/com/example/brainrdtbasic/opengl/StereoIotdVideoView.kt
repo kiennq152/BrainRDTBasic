@@ -198,7 +198,7 @@ class StereoIotdVideoView(context: Context, val mediaPlayer: MediaPlayer): GLSur
             if (needUpdate) {
                 mSurface!!.updateTexImage()
                 mSurface!!.getTransformMatrix(mSTMatrix)
-                updateSurface = false
+//                updateSurface = false
                 // Render to frame buffer first
                 textureBufferQueue.pushFrame()
                 textureBufferQueue.bindFrameBuffer()

@@ -5,8 +5,10 @@ import android.graphics.SurfaceTexture
 import android.opengl.GLES20
 import android.opengl.GLSurfaceView
 import android.opengl.Matrix
+import android.os.Build
 import android.util.Log
 import android.view.Surface
+import androidx.annotation.RequiresApi
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -155,6 +157,7 @@ class StereoIotdCameraView(val lifecycleOwner: LifecycleOwner, context: Context,
             Matrix.scaleM(mMVPMatrixRight, 0, scaleMm, scaleMm, 1f)
         }
 
+        @RequiresApi(Build.VERSION_CODES.ICE_CREAM_SANDWICH_MR1)
         override fun onSurfaceCreated(glUnused: GL10?, config: EGLConfig?) {
             videoRenderProgram.create()
             textureBufferQueue.generateTextures()
@@ -245,7 +248,7 @@ class StereoIotdCameraView(val lifecycleOwner: LifecycleOwner, context: Context,
             if (needUpdate) {
                 mSurface!!.updateTexImage()
                 mSurface!!.getTransformMatrix(mSTMatrix)
-                updateSurface = false
+//                updateSurface = false
                 // Render to frame buffer first
                 textureBufferQueue.pushFrame()
                 textureBufferQueue.bindFrameBuffer()

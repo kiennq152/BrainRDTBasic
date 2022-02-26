@@ -11,11 +11,13 @@ import android.os.Environment
 import org.json.JSONException
 import android.widget.AdapterView.OnItemClickListener
 import android.content.Intent
+import android.graphics.Color
 import android.util.Log
 import android.util.SparseArray
 import android.view.View
 import android.widget.*
 import androidx.fragment.app.Fragment
+import androidx.viewbinding.ViewBindings
 import at.huber.youtubeExtractor.VideoMeta
 import at.huber.youtubeExtractor.YouTubeExtractor
 import at.huber.youtubeExtractor.YtFile
@@ -29,6 +31,8 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.io.IOException
 import com.shawnlin.numberpicker.NumberPicker;
+import java.io.File
+import java.lang.NullPointerException
 
 //import com.example.presentation.VideoViewActivity;
 class MainFragment : Fragment() {
@@ -37,10 +41,12 @@ class MainFragment : Fragment() {
     var pickerVals = arrayOf("0", "1", "2", "-1", "-2")
     var bttstart: Button? = null
     var videolist: ListView? = null
-    var adapter: ArrayAdapter<String?>? = null
+    var adapter: VideoListAdapter<String?>? = null
     var link: String? = null
     var iotd: String? = null
     lateinit var listItem: Array<String?>
+    lateinit var listLink: Array<String?>
+
     var isexit:Int? = null
     var jsonArray: JSONArray? = null
     var jobj: JSONObject? = null
@@ -48,7 +54,13 @@ class MainFragment : Fragment() {
     var ytlink: String? = null
     var videodetail: TextView? = null
     var reallink:String? = null
-
+    var bt_onlinevideo:Button?= null
+    var bt_offlinevideo:Button?= null
+    val path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM).absolutePath
+    var isonline = 1
+    val accepted_extention = listOf("avi", "mp4")
+    var pos = 0
+    var imgdownload:View? = null
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 //        Bundle bundle = getArguments();
@@ -123,45 +135,45 @@ class MainFragment : Fragment() {
                 }
                 if (jsonArray != null) {
                     listItem = arrayOfNulls(jsonArray!!.length())
+                    listLink = arrayOfNulls(jsonArray!!.length())
                     for (i in 0 until jsonArray!!.length()) {
                         try {
                             listItem[i] = jsonArray!!.getJSONObject(i)["name"].toString()
+                            listLink[i] = jsonArray!!.getJSONObject(i)["url"].toString()
                         } catch (jsonException: JSONException) {
                             jsonException.printStackTrace()
                         }
                     }
-                    adapter = ArrayAdapter(
-                        requireActivity(), android.R.layout.simple_list_item_1,
-                        android.R.id.text1,
-                        listItem
-                    )
+                    adapter = VideoListAdapter( requireActivity(), listItem.toList().filterNotNull().toTypedArray(),
+                        listLink,listLink )
                 } else Log.e("Files", "Folder not found:")
                 videolist!!.adapter = adapter
+
                 videolist!!.onItemClickListener = OnItemClickListener { parent, view, position, id ->
-                    link = parent.getItemAtPosition(position) as String
-                    try {
+                  if(isonline ==1){
+                      link = parent.getItemAtPosition(position) as String
+                      try {
 //                videodetail!!.text =
 //                    "Time:" + jsonArray!!.getJSONObject(position)["current_time"].toString() + "/n" +
 //                            "Duration:" + jsonArray!!.getJSONObject(position)["time"].toString() + "/n" +
 //                            "Feedback:"
-                        ytlink = jsonArray!!.getJSONObject(position)["url"].toString()
-                    } catch (e: JSONException) {
-                        e.printStackTrace()
-                    }
-                    if (ytlink!=null) {
-                        loadYoutube(ytlink!!)
-//                reallink = "https://iotd.terasoftvn.com/protectedVideos/video001.mp4"
-//                reallink  = "https://rr4---sn-4g5e6nz7.googlevideo.com/videoplayback?expire=1645089925&ei=JcANYprGI9a28gPjp7GIAg&ip=216.131.114.126&id=o-APUsTUogZGKU-9YAd3d6qJxA_xp0hBqba05Pn4JnUzrv&itag=22&source=youtube&requiressl=yes&mh=UE&mm=31%2C26&mn=sn-4g5e6nz7%2Csn-2gb7sn7k&ms=au%2Conr&mv=m&mvi=4&pl=24&initcwndbps=327500&vprv=1&mime=video%2Fmp4&ns=FDPA36KduhlSAF20AK6k9g0G&cnr=14&ratebypass=yes&dur=242.903&lmt=1645030044736074&mt=1645067847&fvip=4&fexp=24001373%2C24007246&beids=23886216&c=WEB&txp=5432434&n=yzRemk_9Ic21uP_lAFD&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cvprv%2Cmime%2Cns%2Ccnr%2Cratebypass%2Cdur%2Clmt&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=AG3C_xAwRQIhALaPmvnmdLyYGFJD5rAIJZ70eOSG9jx963QATcGbq-p_AiBlJUpuXoOvHRGz-2xV5Syz9gNvyRcYaC6lLltPAtBkQw%3D%3D&sig=AOq0QJ8wRgIhALMtwgsMfTn1sAkkKSmRydfE51136jnU0kDBg5X5Ru2bAiEA0bgOH4IwmXJ6VfH1ebnauxPHHo-iBKxj9FviZbZsM7k%3D&title=Chelsea%20unleash%20exciting%20trio%20in%20Premier%20League%20after%2030%20minute%20Club%20World%20Cup%20final%20trial%20run"
-//                reallink = path +"/video001.mp4"
-
-
-                    }else {
-                        Toast.makeText(activity, "Please select video!", Toast.LENGTH_LONG).show()
-                    }
-
-                    Log.i("Select:", link!! +" "+ ytlink+" "+reallink )
+                          ytlink = jsonArray!!.getJSONObject(position)["url"].toString()
+                      } catch (e: JSONException) {
+                          e.printStackTrace()
+                      }
+                      if (ytlink!=null) {
+                          loadYoutube(ytlink!!)
+                      }else {
+                          Toast.makeText(activity, "Please select video!", Toast.LENGTH_LONG).show()
+                      }
+                      pos = position
+                      Log.i("Select:", link!! +" "+ ytlink+" "+reallink )
+                  }
+                  else{
+                      link = parent.getItemAtPosition(position) as String
+                      pos = position
+                  }
                 }
-
             }
 
             override fun onFailure(call: Call<ResponseBody>, t: Throwable) {
@@ -172,7 +184,6 @@ class MainFragment : Fragment() {
                 )
             }
         })
-//
     }
 
     override fun onCreateView(
@@ -191,12 +202,65 @@ class MainFragment : Fragment() {
         picker!!.setMinValue(0);
         picker!!.setDisplayedValues(pickerVals);
 
+        bt_onlinevideo = binding!!.btOnlinevideolist
+        bt_offlinevideo = binding!!.btLocalvideolist
 
+        bt_offlinevideo!!.setOnClickListener {
+            bt_offlinevideo?.setBackgroundColor(getResources().getColor(R.color.shadow))
+            bt_onlinevideo?.setBackgroundColor(getResources().getColor(R.color.white))
+            isonline = 0
+            val mydir: File = File(path)
+            val lister: File = mydir?.getAbsoluteFile()
+            var i = 0
 
+            listItem = arrayOfNulls<String>(lister?.length().toInt())
+            if (lister != null) {
+                try {
+                    for (list in lister?.list()) {
+                        //
+                        if (list != null) {
+                            if (list.endsWith(".mp4") || list.endsWith(".avi")) {
+                                if (list != null) {
+                                    listItem!![i] = list.toString().trimStart()
+                                    i++
+                                }
+                            }
+                        }
+                    }
+                }
+            catch (e: NullPointerException) {
+                listItem = kotlin.arrayOf("")
+                }
+            }
+            else{
+                listItem = kotlin.arrayOf("")
+            }
+            adapter = VideoListAdapter( requireActivity(), listItem.toList().filterNotNull().toTypedArray().toList().filterNotNull().toTypedArray(),listItem.toList().filterNotNull().toTypedArray().toList().filterNotNull().toTypedArray(),listLink )
+                videolist!!.adapter = adapter
+        }
+
+        bt_onlinevideo!!.setOnClickListener{
+            bt_offlinevideo?.setBackgroundColor(getResources().getColor(R.color.white))
+            bt_onlinevideo?.setBackgroundColor(getResources().getColor(R.color.shadow))
+            isonline = 1
+            if (jsonArray != null) {
+                listItem = arrayOfNulls(jsonArray!!.length())
+                for (i in 0 until jsonArray!!.length()) {
+                    try {
+                        listItem[i] = jsonArray!!.getJSONObject(i)["name"].toString()
+                    } catch (jsonException: JSONException) {
+                        jsonException.printStackTrace()
+                    }
+                }
+                adapter = VideoListAdapter( requireActivity(), listItem.toList().filterNotNull().toTypedArray(),listLink,listLink )
+            } else Log.e("Files", "Folder not found:")
+            videolist!!.adapter = adapter
+
+        }
         //getting file from storage
 //        try {
 //            File directory = new File(path);
-//            File[] files = directory.listFiles();
+//            File[] files = directory . listFiles ();
 //            FragmentManager fm = new FragmentManager() {
 //                @Nullable
 //                @Override
@@ -205,23 +269,24 @@ class MainFragment : Fragment() {
 //                }
 //            };
 //
-//            if (files.length !=0)
-//            {
-//                listItem = new String[files.length];
+
+//            if (files.length != 0) {
+//                listItem = new String [files.length];
 //
 //                for (int i = 0; i < jsonArray.length(); i++)
 //                {
 //                    Log.d("Files", "FileName:" + files[i].getName());
 ////                    listItem[i] = files[i].getName();
 //                    listItem[i] = jsonArray.getJSONObject(i).toString();
-//                }
-//                adapter = new ArrayAdapter<String>(getActivity(),android.R.layout.simple_list_item_1,
-//                        android.R.id.text1,
-//                        listItem);
+////                }
+//                adapter = new ArrayAdapter < String >(
+//                    getActivity(), android.R.layout.simple_list_item_1,
+//                    android.R.id.text1,
+//                    listItem
+//                );
 //
-//            }else Log.e("Files", "Folder not found:");
-//        }
-//        catch (Exception e){
+//            } else Log.e("Files", "Folder not found:");
+//        } catch (Exception e) {
 //            Log.e("Files", "Folder not found:");
 //        }
         return binding!!.root
@@ -229,22 +294,35 @@ class MainFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        val path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM).absolutePath
 
         binding!!.btStartview.setOnClickListener {
             val intent = Intent(activity, ViewActivity::class.java)
-            if (isexit!=null){
+            if (isonline == 0){
+                intent.putExtra("position",  pos.toString())
+                intent.putExtra("savedlist",listItem.joinToString())
                 intent.putExtra("videolist",(activity as MainActivity?)!!.videolist )
-                intent.putExtra("link", reallink)
+                intent.putExtra("linklist",listLink.joinToString() )
+                intent.putExtra("link",path + "/"+link )
                 intent.putExtra("iotd", pickerVals.get(picker!!.value))
+                intent.putExtra("isonline", isonline.toString())
                 startActivity(intent)
-
                 Log.i("Mainview:", "startvideo")
             }
             else{
-                Toast.makeText(activity, "No video found!", Toast.LENGTH_LONG).show()
+                if (isexit!=null){
+                    intent.putExtra("videolist",(activity as MainActivity?)!!.videolist )
+                    intent.putExtra("link", reallink)
+                    intent.putExtra("linklist",listLink.joinToString() )
+                    intent.putExtra("position",  pos.toString())
+                    intent.putExtra("iotd", pickerVals.get(picker!!.value))
+                    intent.putExtra("isonline", isonline.toString())
+                    startActivity(intent)
+                    Log.i("Mainview:", "startvideo")
+                }
+                else{
+                    Toast.makeText(activity, "No video found!", Toast.LENGTH_LONG).show()
+                }
             }
-
         }
 
     }
@@ -265,6 +343,7 @@ class MainFragment : Fragment() {
                     val i = Log.i("youtubeplayer:", "Opening$downloadUrl")
                     mediaurl[0] = downloadUrl
                     reallink = ytFiles[itag].url
+                    Toast.makeText(activity, "Video selected! ", Toast.LENGTH_LONG).show()
                 }else{
                     return;
                 }

@@ -13,10 +13,6 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.util.Log
-import android.widget.FrameLayout
-import android.widget.SeekBar
-import android.widget.TextView
-import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import java.text.DecimalFormat
@@ -28,9 +24,17 @@ import com.example.brainrdtbasic.opengl.IStereoVideoView
 import com.example.brainrdtbasic.opengl.StereoIotdCameraView
 import com.example.brainrdtbasic.opengl.StereoIotdVideoView
 import android.media.MediaPlayer.OnCompletionListener
-
-
-
+import android.os.SystemClock
+import android.widget.*
+import android.view.ViewConfiguration
+import android.speech.tts.TextToSpeech
+import android.speech.tts.TextToSpeech.OnInitListener
+import java.util.*
+import android.content.IntentFilter
+import android.media.session.MediaSession
+import android.media.session.PlaybackState
+import android.media.session.PlaybackState.*
+import android.support.v4.media.session.PlaybackStateCompat
 
 
 lateinit var staticMediaPlayer: MediaPlayer
@@ -45,12 +49,16 @@ class ViewActivity : AppCompatActivity(), IGetDeviceRotation, TextureView.Surfac
     )
     //inter pupil distance
     val ipd : Float? = 63F
-    val w : Float?  = 62F
+    val w : Float?  = 50F
     var curposition: Int = 0
     var isvideo: Int = 0
     var iscamera: Int = 0
     var videoSource = "https://iotd.terasoftvn.com/protectedVideos/video001.mp4"
     var dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM).absolutePath
+    var chro: Chronometer? = null
+    var cnt:Long? = 0
+    var savedList:Array<String?>? = null
+    var linkList:Array<String?>? = null
 
     private var speechRecognizer: SpeechRecognizer? = null
     var speechIntent: Intent? = null
@@ -60,34 +68,59 @@ class ViewActivity : AppCompatActivity(), IGetDeviceRotation, TextureView.Surfac
     var iotd:String? = null
     var videolist:String? = null
     val rootView:ViewGroup by lazy { findViewById(android.R.id.content) }
-    val mediaPlayer: MediaPlayer by lazy {
+    var mediaPlayer: MediaPlayer? = null
+    var idx:String? = null
+    var isonline:Int? =null
+    var isask:Int? =null
 
-        MediaPlayer.create(applicationContext, videoUri).apply {
-            //isLooping = true
-            setOnErrorListener { mp, what, extra ->
-                Log.e("Green", "Green mediaplayer error: $what | $extra")
-                false
-            }
-            setOnCompletionListener {
-                Log.e("Green", "Green mediaplayer complete")
-            }
-        }
-    }
+
+    var t1: TextToSpeech? = null
+
+    //    val mediaPlayer: MediaPlayer by lazy {
+//        MediaPlayer.create(applicationContext, videoUri).apply {
+//            //isLooping = true
+//            setOnErrorListener { mp, what, extra ->
+//                Log.e("Green", "Green mediaplayer error: $what | $extra")
+//                false
+//            }
+//            setOnCompletionListener {
+//                Log.e("Green", "Green mediaplayer complete")
+//            }
+//        }
+//    }
     var stereoVideoView: IStereoVideoView? = null
 
     var videoWidthMm = 10f
     var videoDistanceMm = 10f
 
+    @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
     override fun onCreate(savedInstanceState: Bundle1?) {
         super.onCreate(savedInstanceState)
 
+        setContentView(R.layout.activity_view)
+
+        //Add media button listener
+
+        val mediaSession = MediaSession(this,TAG) // Debugging tag, any string
+        mediaSession.setFlags(
+            MediaSession.FLAG_HANDLES_MEDIA_BUTTONS or
+                    MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS
+        )
+
         val extras = intent.extras
         if (extras!=null) {
+            idx = extras.getString("position").toString()
             var url:String = extras.getString("link").toString()
             iotd = extras.getString("iotd").toString()
             videolist = extras.getString("videolist").toString()
+            isonline = extras.getString("isonline")?.toInt()
             videoSource = url;
-            if (videoSource!=null) {
+            var sList: Array<String?>? = (extras.getString("savedlist")?.split(",")?.toTypedArray())
+            savedList = sList?.filterNotNull()?.toTypedArray()
+            sList = (extras.getString("linklist")?.split(",")?.toTypedArray())
+            linkList =sList?.filterNotNull()?.toTypedArray()
+
+                if (videoSource!=null) {
                 videoUri = Uri.parse(videoSource)
             }
             else{
@@ -100,14 +133,80 @@ class ViewActivity : AppCompatActivity(), IGetDeviceRotation, TextureView.Surfac
         ActivityCompat.requestPermissions(
             this,PERMISSIONS_STORAGE,REQUEST_EXTERNAL_STORAGE
         )
-
-        staticMediaPlayer = mediaPlayer
+        mediaPlayer = MediaPlayer.create(applicationContext, videoUri)
+        if (mediaPlayer != null) {
+            staticMediaPlayer = mediaPlayer as MediaPlayer
+        }
 
         Log.d("Green", "Green external storage file: " + videoUri)
 
-        setContentView(R.layout.activity_view)
-        txtview = findViewById(R.id.txtview)
+        txtview = findViewById<TextView>(R.id.txtview)
         layout = findViewById<FrameLayout>(R.id.frm_video)!!
+        chro = findViewById<Chronometer>(R.id.chroma)
+        chro!!.setBase(SystemClock.elapsedRealtime());
+
+        chro?.setOnChronometerTickListener {
+            if (cnt!! >1800){
+                if (iscamera == 0 ){
+                    mediaPlayer?.stop()
+                    speechRecognizer!!.stopListening()
+                    speechRecognizer!!.destroy()
+                    val i = Intent(this@ViewActivity, MainActivity::class.java)
+                    i.putExtra("fragment","6");
+                    i.putExtra("videolist",videolist);
+                    startActivity(i)
+                }
+            }else
+            {
+                if (iscamera == 0 ){
+                    if (mediaPlayer!=null && mediaPlayer!!.isPlaying){
+                        cnt = cnt!!+1
+                        txtview!!.setText(cnt.toString())
+                    }
+                }
+            }
+            val elapsedMillis: Long = SystemClock.elapsedRealtime() - chro!!.getBase()
+            if(elapsedMillis!!>=mediaPlayer!!.duration){
+                var name = videoSource.substring(videoSource.lastIndexOf("/") + 1)
+                 var pos = idx?.toInt()
+                if (pos != null) {
+                    pos = pos + 1
+                }
+                if (isonline ==0){
+                    var video = savedList?.get(pos!!)
+//                var video = idx?.plus(1)?.let { it1 -> savedList?.get(it1) }
+                    if (video?.trimStart() == "null"){
+                        pos = 0
+                        videoUri = Uri.parse(dir + "/" + savedList?.get(pos!!))
+                        mediaPlayer =
+                            MediaPlayer.create(this, videoUri);
+                    }else {
+                        videoUri = Uri.parse(dir + "/" + video?.trimStart())
+                        mediaPlayer =MediaPlayer.create(this, videoUri);
+                    }
+                }else{
+                    var video = linkList?.get(pos!!)
+//                var video = idx?.plus(1)?.let { it1 -> savedList?.get(it1) }
+                    if (video?.trimStart() == null){
+                        pos = 0
+                        videoUri = Uri.parse(dir + "/" + linkList?.get(pos!!))
+                        mediaPlayer = MediaPlayer.create(this, videoUri);
+                    }else {
+                        videoUri = Uri.parse(dir + "/" + video?.trimStart())
+                        mediaPlayer =MediaPlayer.create(this, videoUri);
+                    }
+                }
+
+                idx = pos.toString()
+                changetoVideo()
+                chro!!.setBase(SystemClock.elapsedRealtime());
+                t1?.speak("계속하고십습니까?",TextToSpeech.QUEUE_FLUSH, null);
+                isask=1
+
+                speechRecognizer?.startListening(speechIntent)
+            }
+        }
+        chro!!.start()
 
         videoWidthMm = w!!
         videoDistanceMm = ipd!!
@@ -121,6 +220,13 @@ class ViewActivity : AppCompatActivity(), IGetDeviceRotation, TextureView.Surfac
             ActivityCompat.requestPermissions(
                 this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSION
             )
+        }
+
+        //TTS setup
+        t1 = TextToSpeech(applicationContext) { status ->
+            if (status != TextToSpeech.ERROR) {
+                t1?.setLanguage(Locale.KOREA)
+            }
         }
 
         speechRecognizer= SpeechRecognizer.createSpeechRecognizer(this@ViewActivity)
@@ -145,34 +251,34 @@ class ViewActivity : AppCompatActivity(), IGetDeviceRotation, TextureView.Surfac
                     "video" -> {
                         changetoVideo()
                         if (mediaPlayer!=null){
-                            mediaPlayer.seekTo(curposition)
+                            mediaPlayer!!.seekTo(curposition)
 //                            mediaPlayer.start()
                         }
                     }
                     "비디오" -> {
                         changetoVideo()
                         if (mediaPlayer!=null){
-                            mediaPlayer.seekTo(curposition)
+                            mediaPlayer!!.seekTo(curposition)
 //                            mediaPlayer.start()
                         }
                     }
                     "camera" -> {
                         changetoCam()
                         if (mediaPlayer!=null){
-                            mediaPlayer.pause()
-                            curposition =mediaPlayer.currentPosition
+                            mediaPlayer!!.pause()
+                            curposition =mediaPlayer!!.currentPosition
                         }
                     }
                     "카메라" -> {
                         changetoCam()
                         if (mediaPlayer!=null){
-                            mediaPlayer.pause()
-                            curposition =mediaPlayer.currentPosition
+                            mediaPlayer!!.pause()
+                            curposition =mediaPlayer!!.currentPosition
                         }
                     }
                     "stop" -> {
                         if (mediaPlayer!=null){
-                            mediaPlayer.stop()
+                            mediaPlayer!!.stop()
                         }
                         speechRecognizer!!.stopListening()
                         speechRecognizer!!.destroy()
@@ -183,7 +289,7 @@ class ViewActivity : AppCompatActivity(), IGetDeviceRotation, TextureView.Surfac
                     }
                     "스탑" -> {
                         if (mediaPlayer!=null){
-                            mediaPlayer.stop()
+                            mediaPlayer!!.stop()
                         }
                         speechRecognizer!!.stopListening()
                         speechRecognizer!!.destroy()
@@ -192,8 +298,25 @@ class ViewActivity : AppCompatActivity(), IGetDeviceRotation, TextureView.Surfac
                         i.putExtra("videolist",videolist);
                         startActivity(i)
                     }
+                    "네" ->{
+                        if(isask==1){
+                            if (mediaPlayer!=null){
+                                mediaPlayer!!.stop()
+                            }
+                            speechRecognizer!!.stopListening()
+                            speechRecognizer!!.destroy()
+                            val i = Intent(this@ViewActivity, MainActivity::class.java)
+                            isask=0
+                            i.putExtra("fragment","6");
+                            i.putExtra("videolist",videolist);
+                            startActivity(i)
+                        }
+                    }
 
-                    else -> Log.i("Speech to text", data!![0].toString())
+                    else -> {
+                        t1?.speak("이해하지 못합니다!",TextToSpeech.QUEUE_FLUSH, null);
+                        Log.i("Speech to text", data!![0].toString())
+                    }
                 }
 
             }
@@ -214,9 +337,38 @@ class ViewActivity : AppCompatActivity(), IGetDeviceRotation, TextureView.Surfac
             RecognizerIntent.ACTION_RECOGNIZE_SPEECH,
             RecognizerIntent.EXTRA_PREFER_OFFLINE
         )
-        mediaPlayer.setOnCompletionListener {
-                mp -> mp.release()
-                this.finish()
+        mediaPlayer!!.setOnCompletionListener {
+//            if ( cnt!!<1800)
+//                {
+//
+//                    var name = videoSource.substring(videoSource.lastIndexOf("/") + 1)
+//                    var idx = savedList?.indexOf(name)
+//                    var video = idx?.plus(1)?.let { it1 -> savedList?.get(it1) }
+//                    if (video?.trimStart() == "null"){
+//
+//                        idx = 0
+//                        videoUri = Uri.parse(dir + "/" + savedList?.get(idx))
+////                            mediaPlayer.setDataSource(dir+ "/" + savedList?.get(idx))
+//                        mediaPlayer =
+//                            MediaPlayer.create(this, Uri.parse(dir + "/" + savedList?.get(idx)));
+//
+//
+//                    }else {
+//
+//                        videoUri = Uri.parse(dir + "/" + video)
+////                        mediaPlayer.setDataSource(dir + "/" + video)
+//                        mediaPlayer =MediaPlayer.create(this, Uri.parse(dir+ "/" + video));
+//                    }
+//
+//                    changetoVideo()
+//
+//                }
+//            else
+//            {
+//                mediaPlayer!!.release()
+//                Toast.makeText(this, "30 minutes treatment time is finished!", Toast.LENGTH_LONG).show()
+//                this.finish()
+//            }
         }
 
     }
@@ -249,7 +401,7 @@ class ViewActivity : AppCompatActivity(), IGetDeviceRotation, TextureView.Surfac
 
     private fun start() {
         iscamera = 0
-        stereoVideoView = StereoIotdVideoView(this, mediaPlayer).apply {
+        stereoVideoView = StereoIotdVideoView(this, mediaPlayer!!).apply {
 //        stereoVideoView = com.example.brainrdtbasic.opengl.StereoIotdCameraView(this, this, this).apply{
             layoutParams =  ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
             iotd?.let { setIotdValue(it.toInt()) }
@@ -292,7 +444,8 @@ class ViewActivity : AppCompatActivity(), IGetDeviceRotation, TextureView.Surfac
     private fun changetoVideo(){
 
         layout?.removeAllViews()
-        stereoVideoView = StereoIotdVideoView(this, mediaPlayer).apply {
+        chro!!.start()
+        stereoVideoView = StereoIotdVideoView(this, mediaPlayer!!).apply {
             layoutParams =  ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
             iotd?.let { setIotdValue(it.toInt()) }
             iotd?.let { Log.i("Video IOTD:", it) }
@@ -336,8 +489,8 @@ class ViewActivity : AppCompatActivity(), IGetDeviceRotation, TextureView.Surfac
 
     override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
         val s = Surface(surface)
-        mediaPlayer.setSurface(s)
-        mediaPlayer.start()
+        mediaPlayer!!.setSurface(s)
+        mediaPlayer!!.start()
     }
 
     override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {
@@ -367,19 +520,23 @@ class ViewActivity : AppCompatActivity(), IGetDeviceRotation, TextureView.Surfac
         speechRecognizer!!.stopListening()
 
     }
-
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         // This is the center button for headphones
         if (event != null) {
             if (event.getKeyCode() == KeyEvent.KEYCODE_HEADSETHOOK) {
+                t1?.speak("말씀하세요!",TextToSpeech.QUEUE_FLUSH, null);
+                isask=1
+                speechRecognizer?.startListening(speechIntent)
+                return true
+
 //                speechRecognizer?.startListening(speechIntent)
                 Toast.makeText(this, "BUTTON PRESSED!", Toast.LENGTH_SHORT).show();
-
+                //// switch screen between camera and video
                 if (iscamera ==1)
                 {
                     changetoVideo()
                     if (mediaPlayer!=null){
-                        mediaPlayer.seekTo(curposition)
+                        mediaPlayer!!.seekTo(curposition)
 //                            mediaPlayer.start()
                     }
                     return true
@@ -389,8 +546,8 @@ class ViewActivity : AppCompatActivity(), IGetDeviceRotation, TextureView.Surfac
                 if (iscamera == 0 ){
                     changetoCam()
                     if (mediaPlayer!=null){
-                        mediaPlayer.pause()
-                        curposition =mediaPlayer.currentPosition
+                        mediaPlayer!!.pause()
+                        curposition =mediaPlayer!!.currentPosition
                     }
                     return true
                 }
@@ -402,13 +559,21 @@ class ViewActivity : AppCompatActivity(), IGetDeviceRotation, TextureView.Surfac
                 return true;
             }
 
+            when (keyCode) {
+                KeyEvent.KEYCODE_MEDIA_NEXT-> {
+                    speechRecognizer?.startListening(speechIntent)
+                    Toast.makeText(this, "BUTTON PRESSED!", Toast.LENGTH_SHORT).show();
+                    return true
+                }
+            }
+
         }
 //        if (event != null) {
 //            if (event.getKeyCode() == KeyEvent.KEYCODE_VOLUME_DOWN) {
 //                changetoCam()
 //                if (mediaPlayer!=null){
-//                    mediaPlayer.pause()
-//                    curposition =mediaPlayer.currentPosition
+//                    mediaPlayer!!.pause()
+//                    curposition = mediaPlayer!!.currentPosition
 //                }
 //
 //                Toast.makeText(this, "BUTTON PRESSED!", Toast.LENGTH_SHORT).show();
@@ -419,8 +584,8 @@ class ViewActivity : AppCompatActivity(), IGetDeviceRotation, TextureView.Surfac
 //            if (event.getKeyCode() == KeyEvent.KEYCODE_VOLUME_UP) {
 //                changetoVideo()
 //                if (mediaPlayer!=null){
-//                    mediaPlayer.seekTo(curposition)
-//                    mediaPlayer.start()
+//                    mediaPlayer!!.seekTo(curposition)
+//                    mediaPlayer!!.start()
 //                }
 //                Toast.makeText(this, "BUTTON PRESSED!", Toast.LENGTH_SHORT).show();
 //                return true;
@@ -428,10 +593,16 @@ class ViewActivity : AppCompatActivity(), IGetDeviceRotation, TextureView.Surfac
 //        }
         return super.onKeyDown(keyCode, event)
     }
-
+    var callback: MediaSession.Callback = @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
+    object : MediaSession.Callback() {
+        override fun onPlay() {
+            // Handle the play button
+        }
+    }
     override fun onBackPressed() {
-        mediaPlayer.stop()
+        mediaPlayer!!.stop()
         super.onBackPressed()
 
     }
+
 }

@@ -12,4 +12,5 @@
     <color name="colorAccent">#80323232</color>
     <color name="green">#339966</color>
     <color name="shadow">#80bebebe</color>
+    <color name="gray">#80bebebe</color>
 </resources>
